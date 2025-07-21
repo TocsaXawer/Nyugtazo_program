@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fakturor - Faktureringsapp</title>
+    <link rel="icon" type="image/x-icon" href="{{ url_for('static', filename='logo.ico')}}">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" xintegrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH" crossorigin="anonymous">
+    <style>
+        body {
+            padding-top: 56px; /* A navigációs sáv magassága */
+        }
+        .btn-sm svg {
+            vertical-align: middle;
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark fixed-top">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="{{ url_for('invoices') }}">Fakturering</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav">
+                    <li class="nav-item">
+                        <a class="nav-link {% if 'invoices' in request.path %}active{% endif %}" href="{{ url_for('invoices') }}">Fakturor</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link {% if 'companies' in request.path %}active{% endif %}" href="{{ url_for('companies') }}">Företag</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link {% if 'sajat-cegem' in request.path %}active{% endif %}" href="{{ url_for('owner_company_details') }}">Mitt företag</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link {% if 'statistics' in request.path %}active{% endif %}" href="{{ url_for('statistics') }}">Statistik</a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container mt-4">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+                        {{ message }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                    </div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        <h1 class="mb-4">Fakturor</h1>
+
+        <div class="card mb-4">
+            <div class="card-header">
+                Skapa ny faktura
+            </div>
+            <div class="card-body">
+                <form action="{{ url_for('add_invoice') }}" method="POST">
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="company_id" class="form-label">Företag:</label>
+                            <select class="form-select" id="company_id" name="company_id" required>
+                                {% for company in companies %}
+                                    <option value="{{ company.id }}">{{ company.name }} (Organisationsnummer: {{ company.tax_number }})</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="invoice_number" class="form-label">Fakturanummer:</label>
+                            <input type="text" class="form-control" id="invoice_number" name="invoice_number" required>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-4 mb-3">
+                            <label for="issue_date" class="form-label">Fakturadatum:</label>
+                            <input type="date" class="form-control" id="issue_date" name="issue_date" value="{{ today }}" required>
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label for="due_date" class="form-label">Förfallodatum:</label>
+                            <input type="date" class="form-control" id="due_date" name="due_date" value="{{ due_date }}" required>
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label for="currency" class="form-label">Valuta:</label>
+                            <input type="text" class="form-control" id="currency" name="currency" value="EUR">
+                        </div>
+                    </div>
+                    
+                    <hr>
+                    <h5 class="mt-3">Fakturarader</h5>
+                    <table class="table table-sm">
+                        <thead>
+                            <tr>
+                                <th style="width: 50%;">Beskrivning</th>
+                                <th style="width: 15%;">Antal</th>
+                                <th style="width: 15%;">Pris per enhet</th>
+                                <th style="width: 15%;">Totalt</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody id="invoice-items">
+                            <!-- JavaScript will populate rows here -->
+                        </tbody>
+                    </table>
+                    <button type="button" class="btn btn-secondary btn-sm" id="add-item-btn">Lägg till ny rad</button>
+                    <hr>
+
+                    <h4 class="text-end mb-4">Summa att betala: <span id="grand-total">0.00</span></h4>
+                    
+                    <button type="submit" class="btn btn-primary">Skapa faktura</button>
+                </form>
+            </div>
+        </div>
+
+        <h2 class="mt-5 mb-3">Lista och filtrera fakturor</h2>
+        <form action="{{ url_for('invoices') }}" method="GET" class="mb-4 row g-3 align-items-end">
+            <div class="col-md-4">
+                <label for="search_company_name" class="form-label">Företagsnamn (delvis matchning):</label>
+                <input type="text" class="form-control" id="search_company_name" name="search_company_name" value="{{ search_company_name }}">
+            </div>
+            <div class="col-md-3">
+                <label for="start_date" class="form-label">Från datum:</label>
+                <input type="date" class="form-control" id="start_date" name="start_date" value="{{ start_date }}">
+            </div>
+            <div class="col-md-3">
+                <label for="end_date" class="form-label">Till datum:</label>
+                <input type="date" class="form-control" id="end_date" name="end_date" value="{{ end_date }}">
+            </div>
+            <div class="col-md-2">
+                <button type="submit" class="btn btn-secondary w-100">Filtrera</button>
+            </div>
+        </form>
+
+        {% if invoices %}
+            <table class="table table-striped table-hover">
+                <thead>
+                    <tr>
+                        <th>Fakturanummer</th>
+                        <th>Företagsnamn</th>
+                        <th>Fakturadatum</th>
+                        <th>Förfallodatum</th>
+                        <th>Summa</th>
+                        <th>Valuta</th>
+                        <th>Åtgärder</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for invoice in invoices %}
+                        <tr>
+                            <td>{{ invoice.invoice_number }}</td>
+                            <td>{{ invoice.company.name }}</td>
+                            <td>{{ invoice.issue_date.strftime('%Y-%m-%d') }}</td>
+                            <td>{{ invoice.due_date.strftime('%Y-%m-%d') }}</td>
+                            <td>{{ "%.2f"|format(invoice.total_amount) }}</td>
+                            <td>{{ invoice.currency }}</td>
+                            <td>
+                                <a href="{{ url_for('edit_invoice', invoice_id=invoice.id) }}" class="btn btn-sm btn-warning" title="Redigera"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-pencil-square" viewBox="0 0 16 16"><path d="M15.502 1.94a.5.5 0 0 1 0 .706L14.459 3.69l-2-2L13.502.646a.5.5 0 0 1 .707 0l1.293 1.293zm-1.75 2.456-2-2L4.939 9.21a.5.5 0 0 0-.121.196l-.805 2.414a.25.25 0 0 0 .316.316l2.414-.805a.5.5 0 0 0 .196-.12l6.813-6.814z"/><path fill-rule="evenodd" d="M1 13.5A1.5 1.5 0 0 0 2.5 15h11a1.5 1.5 0 0 0 1.5-1.5v-6a.5.5 0 0 0-1 0v6a.5.5 0 0 1-.5.5h-11a.5.5 0 0 1-.5-.5v-11a.5.5 0 0 1 .5-.5H9a.5.5 0 0 0 0-1H2.5A1.5 1.5 0 0 0 1 2.5v11z"/></svg></a>
+                                <a href="{{ url_for('generate_invoice_pdf', invoice_id=invoice.id) }}" class="btn btn-sm btn-info" title="PDF" target="_blank"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-file-earmark-pdf" viewBox="0 0 16 16"><path d="M14 14V4.5L9.5 0H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2zM9.5 3A1.5 1.5 0 0 0 11 4.5h2V14a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1h5.5v2z"/><path d="M4.603 14.087a.81.81 0 0 1-.438-.42c-.195-.388-.13-.776.08-1.102.198-.307.526-.568.897-.787a7.68 7.68 0 0 1 1.482-.645 19.697 19.697 0 0 0 1.062-2.227 7.269 7.269 0 0 1-.43-1.295c-.086-.4-.119-.796-.046-1.136.075-.354.274-.672.658-.877.37-.198.815-.143 1.175.08c.349.21.609.554.68.993.069.423-.01.85-.159 1.233a7.48 7.48 0 0 1-1.338 2.511c.285.34.458.715.584 1.11.129.402.19.852.176 1.32a3.87 3.87 0 0 1-.416 1.34c-.226.364-.538.656-.926.784-.398.134-.846.132-1.226-.034a2.95 2.95 0 0 1-.955-.652c-.281-.228-.51-.507-.655-.827z"/></svg></a>
+                                <form action="{{ url_for('delete_invoice', invoice_id=invoice.id) }}" method="POST" style="display:inline;" onsubmit="return confirm('Är du säker på att du vill ta bort den här fakturan?');">
+                                    <button type="submit" class="btn btn-sm btn-danger" title="Ta bort"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-trash" viewBox="0 0 16 16"><path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6z"/><path fill-rule="evenodd" d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1v1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4H4.118zM2.5 3V2h11v1h-11z"/></svg></button>
+                                </form>
+                            </td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        {% else %}
+            <p>Inga fakturor som matchar filterkriterierna har registrerats.</p>
+        {% endif %}
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" xintegrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz" crossorigin="anonymous"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const itemsContainer = document.getElementById('invoice-items');
+            const addItemBtn = document.getElementById('add-item-btn');
+            const grandTotalElement = document.getElementById('grand-total');
+
+            function addItemRow() {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td><input type="text" name="item_description" class="form-control form-control-sm" required></td>
+                    <td><input type="number" name="item_quantity" class="form-control form-control-sm item-calc" step="any" value="1" required></td>
+                    <td><input type="number" name="item_unit_price" class="form-control form-control-sm item-calc" step="any" value="0" required></td>
+                    <td><input type="text" class="form-control form-control-sm item-total" readonly></td>
+                    <td><button type="button" class="btn btn-danger btn-sm remove-item-btn">X</button></td>
+                `;
+                itemsContainer.appendChild(row);
+            }
+
+            function updateTotals() {
+                let grandTotal = 0;
+                const currencyInput = document.getElementById('currency');
+                itemsContainer.querySelectorAll('tr').forEach(row => {
+                    const quantity = parseFloat(row.querySelector('[name="item_quantity"]').value) || 0;
+                    const unitPrice = parseFloat(row.querySelector('[name="item_unit_price"]').value) || 0;
+                    const itemTotal = quantity * unitPrice;
+                    row.querySelector('.item-total').value = itemTotal.toFixed(2);
+                    grandTotal += itemTotal;
+                });
+                grandTotalElement.textContent = `${grandTotal.toFixed(2)} ${currencyInput.value}`;
+            }
+
+            addItemBtn.addEventListener('click', addItemRow);
+
+            itemsContainer.addEventListener('click', function(e) {
+                if (e.target.classList.contains('remove-item-btn')) {
+                    e.target.closest('tr').remove();
+                    updateTotals();
+                }
+            });
+
+            itemsContainer.addEventListener('input', function(e) {
+                if (e.target.classList.contains('item-calc')) {
+                    updateTotals();
+                }
+            });
+
+            document.getElementById('currency').addEventListener('input', updateTotals);
+            
+            if (itemsContainer.children.length === 0) {
+                addItemRow();
+            }
+            updateTotals();
+        });
+    </script>
+</body>
+</html>
